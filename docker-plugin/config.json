@@ -1,13 +1,13 @@
 {
-    "description": "Network driver to construct and manage CAN bus network for docker.", 
+    "description": "Network driver to construct and manage CAN bus network for docker, with optional per-container eBPF (tc) programs.",
     "documentation": "https://github.com/Nomadic-Drones/rustycan4docker",
     "entrypoint": ["/usr/local/bin/rustycan4docker"],
     "network": {
-	"type": "host"
+        "type": "host"
     },
-    "interface" : {
-	"types": ["docker.networkdriver/1.0"],
-	"socket": "rustyvxcan.sock"
+    "interface": {
+        "types": ["docker.networkdriver/1.0"],
+        "socket": "rustyvxcan.sock"
     },
     "propagatedMount": "/var/lib/docker/network/files",
     "mounts": [
@@ -16,10 +16,36 @@
             "destination": "/var/lib/docker/network/files",
             "type": "bind",
             "options": ["rbind", "rw"]
+        },
+        {
+            "description": "Container network namespaces (SandboxKey), needed to attach BPF programs inside containers",
+            "source": "/var/run/docker/netns",
+            "destination": "/var/run/docker/netns",
+            "type": "bind",
+            "options": ["rbind", "rslave", "ro"]
+        },
+        {
+            "description": "BPF object files referenced by vxcan.bpf.obj",
+            "source": "/var/lib/rustycan4docker/bpf",
+            "destination": "/var/lib/rustycan4docker/bpf",
+            "type": "bind",
+            "options": ["rbind", "ro"]
+        },
+        {
+            "description": "bpffs, so maps pinned by loaded programs are visible on the host",
+            "source": "/sys/fs/bpf",
+            "destination": "/sys/fs/bpf",
+            "type": "bind",
+            "options": ["rbind", "rslave", "rw"]
         }
     ],
     "linux": {
-	"capabilities": ["CAP_NET_ADMIN"]
+        "capabilities": [
+            "CAP_NET_ADMIN",
+            "CAP_SYS_ADMIN",
+            "CAP_BPF",
+            "CAP_PERFMON",
+            "CAP_SYS_RESOURCE"
+        ]
     }
-
 }

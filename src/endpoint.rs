@@ -32,6 +32,8 @@ pub struct Endpoint {
     pub device: String,
     pub peer: String,
     created: bool,
+    /// Driver options given for this endpoint (CreateEndpoint + Join), e.g. vxcan.bpf.*
+    pub opts: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Endpoint {
@@ -161,6 +163,7 @@ impl Endpoint {
             device: newifc,
             peer: peerifc,
             created: !exists,
+            opts: serde_json::Map::new(),
         }
     }
 }

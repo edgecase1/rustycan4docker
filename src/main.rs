@@ -34,9 +34,11 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::UnixListenerStream;
 use warp::{http, Filter};
 
+pub mod bpf;
 pub mod endpoint;
 pub mod manager;
 pub mod network;
+pub mod nsutil;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct ErrorResponse {
@@ -198,7 +200,7 @@ async fn api_endpoint_create(
                 }
             };
             if !error {
-                mgr.endpoint_create(nuid, epuid);
+                mgr.endpoint_create(nuid, epuid, v["Options"].clone());
                 "{}"
             } else {
                 status = http::StatusCode::BAD_REQUEST;

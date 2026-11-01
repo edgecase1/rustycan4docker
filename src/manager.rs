@@ -26,6 +26,7 @@
 
 use crate::endpoint::Endpoint;
 use crate::network::{JoinResponse, Network};
+use crate::nsutil::flatten_options;
 use bollard::network::ListNetworksOptions;
 use bollard::Docker;
 use parking_lot::{RwLock, Mutex};
@@ -217,9 +218,10 @@ impl NetworkManager {
         }
     }
 
-    pub fn endpoint_create(&self, nuid: String, epuid: String) {
-        // Create the endpoint
-        let ep = Endpoint::new(epuid);
+    pub fn endpoint_create(&self, nuid: String, epuid: String, options: serde_json::Value) {
+        // Create the endpoint and keep its driver options (vxcan.bpf.*) for Join
+        let mut ep = Endpoint::new(epuid);
+        ep.opts = flatten_options(&options);
 
         // Lock the network list
         let mut map = self.network_list.write();
@@ -257,7 +259,7 @@ impl NetworkManager {
         &self,
         nuid: String,
         epuid: String,
-        _sbox: String,
+        sbox: String,
         options: String,
     ) -> Result<JoinResponse, Error> {
         // REBOOT RESILIENCE: Check if network exists in memory
@@ -400,10 +402,10 @@ impl NetworkManager {
                     Err(_) => String::new(),
                 };
 
-                let namespace = String::new();
+                let join_opts = flatten_options(&serde_json::Value::String(options.clone()));
 
                 // Add the endpoint to the network (or reattach after reboot)
-                let rsp = n.endpoint_attach(epuid, namespace, peer)?;
+                let rsp = n.endpoint_attach(epuid, sbox, peer, join_opts)?;
                 Ok(rsp)
             }
             None => {

@@ -110,3 +110,31 @@ Once installed, use `nomadicdrones/rustycan4docker` as the driver name:
 # Create the network using the installed plugin
 docker network create --driver nomadicdrones/rustycan4docker -o vxcan.dev=vcan -o vxcan.id=0 -o vxcan.peer=vxcanp rust_can1
 ```
+
+## eBPF programs on container interfaces (tc)
+
+Each container's interface can get an eBPF program from an object file, loaded
+with `tc`. Set these as **endpoint** driver options (compose:
+`services.<svc>.networks.<net>.driver_opts`, CLI: `docker network connect --driver-opt`):
+
+| Option | Meaning | Default |
+|---|---|---|
+| `vxcan.bpf.obj` | Object file, relative to `/var/lib/rustycan4docker/bpf` on the host | (none, BPF off) |
+| `vxcan.bpf.sec` | ELF section of the program | `classifier` (tc default) |
+| `vxcan.bpf.direction` | `ingress` (frames the container receives) or `egress` (frames it sends) | `ingress` |
+
+The vxcan/cangw setup is unchanged. On Join the plugin tags the container-side
+vxcan interface with an alias, waits until Docker has moved and renamed it inside
+the container, then runs `tc qdisc replace dev <if> clsact` and
+`tc filter replace dev <if> <direction> pref 1 handle 1 bpf direct-action obj <file> [sec <sec>]`
+in the container's network namespace. Failures are logged by the plugin
+(`journalctl -u docker | grep BPF`).
+
+Host prerequisites (both directories must exist before `docker plugin enable`):
+
+```
+sudo mkdir -p /var/lib/rustycan4docker/bpf /var/run/docker/netns
+```
+
+The plugin additionally gets CAP_SYS_ADMIN, CAP_BPF, CAP_PERFMON and
+CAP_SYS_RESOURCE to enter container namespaces and load programs.

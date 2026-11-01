@@ -24,7 +24,9 @@
  * SOFTWARE.
  */
 
+use crate::bpf::{self, BpfSpec};
 use crate::endpoint::Endpoint;
+use crate::nsutil::run;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -213,8 +215,9 @@ impl Network {
     pub fn endpoint_attach(
         &mut self,
         epuid: String,
-        _namespace: String,
+        namespace: String,
         peer: String,
+        join_opts: serde_json::Map<String, serde_json::Value>,
     ) -> Result<JoinResponse, Error> {
         // REBOOT RESILIENCE: Ensure network interface exists before proceeding
         // After system reboot, Docker metadata persists but kernel interfaces don't.
@@ -280,6 +283,34 @@ impl Network {
                 let mut peerifc = &peer;
                 if peer.is_empty() {
                     peerifc = &self.peer;
+                }
+
+                // Optional eBPF program for this container's interface. Options
+                // from CreateEndpoint, overridden by any given at Join.
+                let mut opts = ep.opts.clone();
+                opts.extend(join_opts);
+                match BpfSpec::from_options(&opts) {
+                    Ok(Some(spec)) => {
+                        // Tag the interface so it can be found after Docker moves
+                        // and renames it, then attach once it is in the container.
+                        let alias = bpf::alias_for(&epuid);
+                        if let Err(e) = run("ip", &["link", "set", "dev", &ep.peer, "alias", &alias]) {
+                            eprintln!(" !! {e}");
+                            return Err(Error);
+                        }
+                        println!(
+                            " -> Will attach BPF {} to {} once it is in {}",
+                            spec.obj.display(),
+                            ep.peer,
+                            namespace
+                        );
+                        bpf::spawn_attach(namespace, ep.peer.clone(), alias, spec);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        eprintln!(" !! {e}");
+                        return Err(Error);
+                    }
                 }
 
                 let rsp = JoinResponse {
